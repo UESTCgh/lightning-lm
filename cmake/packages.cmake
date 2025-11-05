@@ -1,8 +1,9 @@
-find_package(glog REQUIRED)
+
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(yaml-cpp REQUIRED)
-find_package(glog REQUIRED)
+find_package(glog QUIET)
+
 find_package(Pangolin REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(pcl_conversions REQUIRED)
@@ -19,6 +20,13 @@ find_package(tf2_ros REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
+
+if(NOT glog_FOUND)
+        pkg_check_modules(glog REQUIRED libglog)
+        set(glog_LIBRARIES ${glog_LINK_LIBRARIES})
+        set(GLOG_INCLUDE_DIRS ${glog_INCLUDE_DIRS})
+        set(GLOG_LIBRARIES ${glog_LINK_LIBRARIES})
+endif()
 # OMP
 find_package(OpenMP)
 if (OPENMP_FOUND)

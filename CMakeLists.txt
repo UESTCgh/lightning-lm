@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(lightning)
-
+# set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
+# set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+# set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # Default to C++17
 if (NOT CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD 17)
@@ -27,6 +29,7 @@ endif ()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 # set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/libs)
 # set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/libs)
+
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(cmake/packages.cmake)
