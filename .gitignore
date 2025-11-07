@@ -4,8 +4,9 @@
 *.vscode
 *libs
 **data
-**/.vscode/
-bin
-
+.vscode/
+**temp
 **cmake-build-debug**
 **cmake-build-release**
+**thirdparty/
+bin
