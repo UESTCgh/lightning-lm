@@ -1,8 +1,129 @@
 # Lightning-LM
 
-Lightning-Speed Lidar Localization and Mapping
+## 🌐 Language / 语言
+- [English](#english)
+- [中文](#中文)
 
-Lightning-LM is a complete laser mapping and localization module.
+---
+
+## English
+
+### Purpose
+This ROS1 fork (`catkin` + Melodic/Noetic) is kept for learning and to document how I ran Lightning-LM locally. The upstream ROS2 project remains the canonical source; this document simply records my ROS1 workflow.
+
+### Clone & Workspace Setup
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/liefengguo/lightning-lm_ROS1.git lightning
+cd ..
+catkin_make
+source devel/setup.zsh    or bash
+```
+
+### ROS1 Usage
+- Offline SLAM replay  
+  ```bash
+  roslaunch lightning run_offline.launch config_file:=config/default_nclt.yaml
+  ```
+- Online SLAM (live sensors or fast LiDAR data)  
+  ```bash
+  roslaunch lightning run_online.launch config_file:=config/fastliodata.yaml
+  ```
+- Localization only  
+  ```bash
+  rosrun lightning run_loc_online --config config/default_nclt.yaml
+  ```
+- Save current map artifacts anytime:  
+  ```bash
+  rosservice call /lightning/save_map "{map_id: demo}"
+  ```
+
+Outputs land inside `data/<map_id>/` (`global.pcd`, `tiles/`, optional `map.pgm/map.yaml`). TF publishes `map -> base_link`; Pangolin UI can be enabled via config.
+
+### ROS Topics (Inputs/Outputs)
+| Direction | Topic (default)        | Type                              | Description / Config Key                  |
+|-----------|------------------------|-----------------------------------|-------------------------------------------|
+| Input     | `/imu/data`            | `sensor_msgs/Imu`                 | IMU samples (`common.imu_topic`)          |
+| Input     | `/velodyne_points`     | `sensor_msgs/PointCloud2`         | Standard LiDAR cloud (`common.lidar_topic`) |
+| Input     | `/livox/lidar`         | `livox_ros_driver/CustomMsg`      | Livox packets (`common.livox_lidar_topic`) |
+| Output    | `TF map -> base_link`  | `geometry_msgs/TransformStamped`  | Localization result (`LocalizationResult`) |
+| Output    | Pangolin UI / logs     | -                                 | Optional visualization + glog             |
+| Output    | `data/<map_id>/...`    | Files on disk                     | Saved point clouds & 2D grids             |
+
+### Config Files & Key Parameters
+- `config/default_nclt.yaml`: general template for offline/online use.
+- `config/fastliodata.yaml`: lightweight config referenced by `run_online.launch`.
+- Important fields:
+  - `common.imu_topic`, `common.lidar_topic`, `common.livox_lidar_topic`
+  - `system.map_path`, `system.map_name`, `system.with_loop_closing`, `system.with_ui`, `system.with_g2p5`
+  - `fasterlio.lidar_type`, `fasterlio.point_filter_num`, `fasterlio.time_scale`
+  - `lidar_loc.*` (localization filters), `g2p5.*` (grid map options)
+
+Adjust these YAMLs before launch to match your dataset/topic layout. For deeper notes see `README_ROS1.md`; the rest of this file captures the original project description for reference.
+
+---
+
+## 中文
+
+### 项目说明
+这个 ROS1 仓库仅用于方便个人学习和记录一下，毕竟ROS1是旧时代的残党，新时代没有能承载它的船，核心算法仍来自上游 ROS2 版本。下文整理了我在 ROS1 中的运行方式，方便日后复现。
+在noetic 简单测试过，可以跑通，也许还有BUG。
+后续有空会加入GPS因子进行优化，maybe！
+### 克隆与工作空间
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/liefengguo/lightning-lm_ROS1.git lightning
+cd ..
+catkin_make
+source devel/setup.zsh    
+```
+
+### ROS1 使用方式
+- 离线 SLAM 回放  
+  ```bash
+  roslaunch lightning run_offline.launch config_file:=config/default_nclt.yaml
+  ```
+- 在线 SLAM / 快速激光数据  
+  ```bash
+  roslaunch lightning run_online.launch config_file:=config/fastliodata.yaml
+  ```
+- 纯定位节点  
+  ```bash
+  rosrun lightning run_loc_online --config config/default_nclt.yaml
+  ```
+- 随时保存地图  
+  ```bash
+  rosservice call /lightning/save_map "{map_id: demo}"
+  ```
+
+所有结果都会写入 `data/<map_id>/`（`global.pcd`、`tiles/`、`map.pgm/map.yaml`）。定位默认发布 `map -> base_link` 的 TF，可通过配置打开 Pangolin UI。
+
+### ROS 话题（输入/输出）
+| 方向 | 话题（默认）              | 类型                             | 说明 / 配置键                              |
+|------|---------------------------|----------------------------------|-------------------------------------------|
+| 输入 | `/imu/data`               | `sensor_msgs/Imu`                | IMU 数据（`common.imu_topic`）             |
+| 输入 | `/velodyne_points`        | `sensor_msgs/PointCloud2`        | 常规激光点云（`common.lidar_topic`）       |
+| 输入 | `/livox/lidar`            | `livox_ros_driver/CustomMsg`     | Livox 数据（`common.livox_lidar_topic`）   |
+| 输出 | `TF map -> base_link`     | `geometry_msgs/TransformStamped` | 定位结果（`LocalizationResult`）           |
+| 输出 | Pangolin UI / 日志        | -                                | 可选可视化与 glog                          |
+| 输出 | `data/<map_id>/...`       | 文件                              | 保存的点云与 2D 栅格                       |
+
+### 配置文件要点
+- `config/default_nclt.yaml`：通用范例，可用于离线/在线。
+- `config/fastliodata.yaml`：`run_online.launch` 默认引用的精简配置。
+- 关键参数：
+  - `common.*`：IMU / LiDAR / Livox 话题名称
+  - `system.*`：是否启用回环、栅格、UI，以及地图名/路径
+  - `fasterlio.*`：激光类型、采样数、时间标定
+  - `lidar_loc.*`、`g2p5.*`：定位与栅格相关选项
+
+运行前根据数据集修改对应 YAML；更多细节可查看 `README_ROS1.md`，下方保留原始文档以供查阅。
+
+---
+
+## Legacy Notes (Original README)
+
+Lightning-Speed Lidar Localization and Mapping
 
 Features of Lightning-LM:
 
