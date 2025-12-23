@@ -33,52 +33,80 @@ void PointCloudPreprocess::Process(const livox_ros_driver::CustomMsg::ConstPtr &
     cloud_out_.clear();
     cloud_full_.clear();
 
-    int plsize = msg->point_num;
-
-    cloud_out_.reserve(plsize);
-    cloud_full_.resize(plsize);
-
-    std::vector<bool> is_valid_pt(plsize, false);
-    std::vector<uint> index(plsize - 1);
-    for (uint i = 0; i < plsize - 1; ++i) {
-        index[i] = i + 1;  // 从1开始
+    if (!msg) {
+        pcl_out->clear();
+        return;
     }
 
-    std::for_each(std::execution::par_unseq, index.begin(), index.end(), [&](const uint &i) {
-        if ((msg->points[i].line < num_scans_) &&
-            ((msg->points[i].tag & 0x30) == 0x10 || (msg->points[i].tag & 0x30) == 0x00)) {
-            if (i % point_filter_num_ == 0) {
-                cloud_full_[i].x = msg->points[i].x;
-                cloud_full_[i].y = msg->points[i].y;
-                cloud_full_[i].z = msg->points[i].z;
-                cloud_full_[i].intensity = msg->points[i].reflectivity;
+    const std::size_t plsize = static_cast<std::size_t>(msg->point_num);
+    const std::size_t ptsz   = msg->points.size();
 
-                // use curvature as time of each laser points, curvature unit: ms
-                cloud_full_[i].time = msg->points[i].offset_time / double(1000000);
+    constexpr std::size_t kMaxPoints = 2'000'000;
+    if (plsize < 2 || plsize != ptsz || plsize > kMaxPoints) {
+        LOG(ERROR) << "Bad Livox msg: point_num=" << msg->point_num
+                   << " points.size=" << ptsz;
+        pcl_out->clear();
+        return;
+    }
 
-                if ((abs(cloud_full_[i].x - cloud_full_[i - 1].x) > 1e-7) ||
-                    (abs(cloud_full_[i].y - cloud_full_[i - 1].y) > 1e-7) ||
-                    (abs(cloud_full_[i].z - cloud_full_[i - 1].z) > 1e-7) &&
-                        (cloud_full_[i].x * cloud_full_[i].x + cloud_full_[i].y * cloud_full_[i].y +
-                             cloud_full_[i].z * cloud_full_[i].z >
-                         (blind_ * blind_))) {
-                    is_valid_pt[i] = true;
+    cloud_out_.points.clear();
+    cloud_out_.points.reserve(plsize);
+    cloud_full_.resize(plsize);
+    std::vector<uint8_t> is_valid_pt(plsize, 0);
+
+    // index 用 size_t，避免符号/溢出问题
+    std::vector<std::size_t> index(plsize - 1);
+    for (std::size_t i = 0; i < plsize - 1; ++i) {
+        index[i] = i + 1;  // 从 1 开始
+    }
+
+    // 用 par 比 par_unseq 更稳（少很多奇怪 UB）
+    std::for_each(std::execution::par, index.begin(), index.end(),
+                  [&](const std::size_t i) {
+        const auto &pt = msg->points[i];
+
+        if ((pt.line < static_cast<uint32_t>(num_scans_)) &&
+            (((pt.tag & 0x30) == 0x10) || ((pt.tag & 0x30) == 0x00))) {
+
+            if (point_filter_num_ > 0 &&
+                (i % static_cast<std::size_t>(point_filter_num_) == 0)) {
+
+                cloud_full_[i].x = pt.x;
+                cloud_full_[i].y = pt.y;
+                cloud_full_[i].z = pt.z;
+                cloud_full_[i].intensity = pt.reflectivity;
+
+                cloud_full_[i].time = pt.offset_time / 1000000.0;  // ms
+
+                const auto &prev = cloud_full_[i - 1];
+                const double dx = cloud_full_[i].x - prev.x;
+                const double dy = cloud_full_[i].y - prev.y;
+                const double dz = cloud_full_[i].z - prev.z;
+
+                const double r2 = cloud_full_[i].x * cloud_full_[i].x +
+                                  cloud_full_[i].y * cloud_full_[i].y +
+                                  cloud_full_[i].z * cloud_full_[i].z;
+
+                if ((std::abs(dx) > 1e-7 || std::abs(dy) > 1e-7 || std::abs(dz) > 1e-7) &&
+                    (r2 > blind_ * blind_)) {
+                    is_valid_pt[i] = 1;
                 }
             }
         }
     });
 
-    for (uint i = 1; i < plsize; i++) {
+    for (std::size_t i = 1; i < plsize; ++i) {
         if (is_valid_pt[i]) {
             cloud_out_.points.push_back(cloud_full_[i]);
         }
     }
 
-    cloud_out_.width = cloud_out_.size();
+    cloud_out_.width = static_cast<uint32_t>(cloud_out_.points.size());
     cloud_out_.height = 1;
     cloud_out_.is_dense = false;
     *pcl_out = cloud_out_;
 }
+
 
 void PointCloudPreprocess::Oust64Handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     cloud_out_.clear();
